@@ -1,86 +1,110 @@
 import streamlit as st
 import requests
+import json
 
 # --- CONFIG AND TITLES --- #
-st.set_page_config(page_title='Weather App', layout='wide')
-st.title("Weather App")
-st.sidebar.title("Location & Forecast")
+st.set_page_config(page_title='Weather App', page_icon=":cloud:", layout='wide')
+st.sidebar.title(":cloud: City Weather")
 
-# --- GET LOCATION AND SEND LAT LON TO GET DATA -- #
-# The dictionary of places with latitude and longitude
-PLACES = {
-    "Brisbane": {"lat": -27.47, "lon": 153.02},
-    "Sydney": {"lat": -33.8688, "lon": 151.2093},
-    "Melbourne": {"lat": -37.81, "lon": 144.96},
-    "Adelaide": {"lat": -34.93, "lon": 138.60},
-    "Darwin": {"lat": -12.46, "lon": 130.84},
-    "Perth": {"lat": -31.95, "lon": 115.86},
-    "Hobart": {"lat": -42.88, "lon": 147.33},
-    "Canberra": {"lat": -35.28, "lon": 149.13}
-}
+def main():
 
-# --- SELECTBOX FOR LOCATION --- #
-place_name = st.sidebar.selectbox("Choose your location", options=PLACES)
+    # --- SELECTBOX FOR LOCATION --- #
+    loc_name = st.sidebar.text_input("Choose your location", placeholder="Enter a location").title()
+    if not loc_name:
+        loc_name = "Brisbane"
+    elif IndexError:
+        st.subheader("Please enter a valid location")
+    else:
+        loc_name = loc_name
 
+    # --- GET LOCATION AND SEND LAT LON TO GET DATA -- #
+    loc_url = f"http://api.openweathermap.org/geo/1.0/direct?q={loc_name}&limit=1&appid=e41a2936f2cd9b3434a1b70001092821"
 
-def lat_lon():
-    return PLACES.keys()
-lat_lon()
+    def get_latlon(loc_url):
+        response = requests.get(loc_url)
+        loc_data = response.json()
+        return loc_data
+    
+    loc_data = get_latlon(loc_url)
+    lat = float(loc_data[0]["lat"])
+    lon = float(loc_data[0]["lon"])
 
-def get_coords(place_name):
-    coords = PLACES.get(place_name, {})
-    #st.write(coords)
-    return coords 
-coords = get_coords(place_name)
+    # --- GET WEATHER DATA --- #
+    weather_url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m","current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "pressure_msl", "wind_direction_10m", "wind_speed_10m", "wind_gusts_10m", "rain", "is_day"],
+        "timezone": "Australia/Brisbane"
+    }
+    headers = {
+        "User-Agent": "MyWeatherApp/1.0 (example.com)"
+    }
 
-# --- GET DATA --- #
-url = "https://api.open-meteo.com/v1/forecast"
-params = {
-	"latitude": coords["lat"],
-	"longitude": coords["lon"],
-	"hourly": "temperature_2m","current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "pressure_msl", "wind_direction_10m", "wind_speed_10m", "wind_gusts_10m", "rain", "is_day"],
-	"timezone": "Australia/Brisbane"
-}
-headers = {
-    "User-Agent": "MyWeatherApp/1.0 (example.com)"
-}
+    def get_weather():
+        response = requests.get(weather_url, params=params, headers=headers)
+        weather_data = response.json()
+        return weather_data
+    
+    weather_data = get_weather()
 
-def get_weather():
-    response = requests.get(url, params=params, headers=headers)
-    data = response.json()
-    return data
-data = get_weather()
+    # --- DISPLAY WEATHER DATA --- #
+    st.header(loc_name)
 
-# --- SELECTBOX FOR FORECAST TIMEFRAME --- #
-st.sidebar.selectbox("Choose your forecast", options=['Today', '3-Days', '5-Days', '7-Days'])
+    # --- Get timezone data and make work --- #
+    #if data["current"]["is_day"] == 1:
+    #    st.subheader(":sunny:") 
+    #else:
+    #    st.subheader(":waxing_crescent_moon:")
 
-# --- DISPLAY HIGH AND LOW TEMPS --- #
-# --- DISPLAY HUMIDITY --- #
-col1, col2, col3 = st.columns(3, gap="small", vertical_alignment="top", border=True, width="stretch")
+    #st.write(timeframe)
 
-with col1:
-    st.subheader("Temp")
-    st.image("img/temperature.jpg")
-    st.write((data["current"]["temperature_2m"]))
-    st.write("Feels Like")
-    st.write((data)["current"]["apparent_temperature"])
+    col1, col2, col3 = st.columns(3, gap="small", border=True, width="stretch")
 
-with col2:
-    st.subheader("Humidity")
-    st.image("img/humidity.jpg")
-    st.write((data["current"]["relative_humidity_2m"]))
-    st.write("Sea Level Pressure")
-    st.write((data)["current"]["pressure_msl"])
+    with col1:
+        st.subheader("Temp")
+        st.image("img/temperature.jpg", width=100)
+        temp = st.metric(label="Current Temp", value=f"{weather_data["current"]["temperature_2m"]} C")
+        st.write("--------")
+        temp_feel = st.metric(label="Feels Like", value=f"{weather_data["current"]["apparent_temperature"]} C", delta=round(weather_data["current"]["apparent_temperature"] - weather_data["current"]["temperature_2m"]))
 
-with col3:
-    st.subheader("Wind")
-    st.image("img/wind.jpg")
-    st.write((data["current"]["wind_speed_10m"]))
-    st.write("Gusting")
-    st.write((data)["current"]["wind_gusts_10m"])
+    with col2:
+        st.subheader("Humidity")
+        st.image("img/humidity.jpg", width=100)
+        humidity = st.metric(label="Current Humidity", value=f"{weather_data["current"]["relative_humidity_2m"]} %")
+        st.write("--------")
+        mslp = st.metric(label="MSLP", value=f"{weather_data["current"]["pressure_msl"]} hPa") 
 
-    st.write((data["current_units"]["wind_speed_10m"]))
+    with col3:
+        st.subheader("Wind")
+        st.image("img/wind.jpg", width=100)
+        wind = st.metric(label="Current Wind Speed", value=f"{weather_data["current"]["wind_speed_10m"]} km/h")
+        gusts = st.metric(label="Wind Gusts", value=f"{weather_data["current"]["wind_gusts_10m"]} km/h") 
+        wind_dir = weather_data["current"]["wind_direction_10m"]
 
-# --- DISPLAY CHANCE OF RAIN AND RAIN SINCE 9AM --- #
+    # --- Wind direction estimators, fix this --- # Rewrite with pythonic code. CS50p conditionals 32mins. 
+        if wind_dir > 25 and wind_dir <= 45:
+            st.metric(label="Wind Direction", value="NE")
+        elif wind_dir > 45 and wind_dir <= 125:
+            st.metric(label="Wind Direction", value="E")
+        elif wind_dir > 125 and wind_dir <= 150:
+            st.metric(label="Wind Direction", value="SE")
+        elif wind_dir > 150 and wind_dir <= 210:
+            st.metric(label="Wind Direction", value="S")
+        elif wind_dir > 210 and wind_dir <= 250:
+            st.metric(label="Wind Direction", value="SW")
+        elif wind_dir > 250 and wind_dir <= 300:
+            st.metric(label="Wind Direction", value="W")
+        elif wind_dir > 300 and wind_dir <= 361 or wind_dir > 0 and wind_dir < 25:
+            st.metric(label="Wind Direction", value="N")
 
-# --- DISPLAY DESCRIPTION OF CONDITIONS --- #
+    # --- DISPLAY 7-DAY FORECAST --- #
+
+    # --- DISPLAY TEMPERATURE GRAPH FOR THE DAY --- #
+
+    # --- DISPLAY CHANCE OF RAIN AND RAIN SINCE 9AM --- #
+
+    # --- DISPLAY DESCRIPTION OF CONDITIONS --- #
+
+if __name__ == '__main__':
+    main()
