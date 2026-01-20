@@ -1,70 +1,28 @@
-import streamlit as st
 import requests
-import pandas as pd
-import plotly.express as px
 from datetime import datetime
 from timezonefinder import TimezoneFinder
 import pytz
+import config
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 
 # --- CONFIG AND TITLES --- #
 st.set_page_config(page_title='Weather App', page_icon=":cloud:", layout='wide')
 st.sidebar.title(":cloud: City Weather")
 
 def main():
-
-    # --- SELECTBOX FOR LOCATION --- #
-    loc_name = st.sidebar.text_input("Choose your location", placeholder="Enter a location").title()
-    if not loc_name:
-        loc_name = "Brisbane"
-    else:
-        loc_name = loc_name
-
-    # --- GET LOCATION AND SEND LAT LON TO GET DATA -- #
-    loc_url = f"http://api.openweathermap.org/geo/1.0/direct?q={loc_name}&limit=1&appid="YOUR-API-KEY-HERE"
-
-    def get_latlon(loc_url):
-        response = requests.get(loc_url)
-        loc_data = response.json()
-        return loc_data
+    # --- GET LOCATION, CALL LAT LON AND RETURN VALUES --- #
+    location = st.sidebar.text_input("Enter your location: ", value="Brisbane").title()
+    lat, lon = get_latlon(location)
     
-    loc_data = get_latlon(loc_url)
-    lat = float(loc_data[0]["lat"])
-    lon = float(loc_data[0]["lon"])
+    # --- CALL TIME FUNCTION AND PRINT TIME --- #
+    st.metric(label="Location", value=location, label_visibility="hidden")
+    time = get_time(lat, lon)
+    st.write(time)
 
-    # --- GET WEATHER DATA --- #
-    weather_url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": ["uv_index_max", "rain_sum"],
-        "hourly": "temperature_2m",
-        "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "is_day", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "rain", "cloud_cover", "surface_pressure"], "timezone": "Australia/Brisbane",
-    }
-    headers = {
-        "User-Agent": "MyWeatherApp/1.0 (example.com)"
-    }
-
-    def get_weather():
-        response = requests.get(weather_url, params=params, headers=headers)
-        weather_data = response.json()
-        return weather_data
-    
-    weather_data = get_weather()
-
-    # --- DISPLAY WEATHER DATA --- #
-    # --- DISPLAY LOCATION AND LOCAL TIME --- #
-    obj = TimezoneFinder()
-    time_zone = obj.timezone_at(lng = lon, lat = lat)
-
-    local_tz = pytz.timezone(time_zone)
-    time_now = datetime.now(local_tz)
-
-    format_string = "%B %d, %H:%M"
-
-    st.metric(label="Location", value=loc_name, label_visibility="hidden")
-    st.write(f"{time_now.strftime(format_string)}")
-
-    # --- CREATE COLUMNS FOR DATA --- #
+    # -- CALL GET WEATHER AND PRINT RESULTS --- #
+    weather_data = get_weather(lat, lon)
     col1, col2, col3 = st.columns(3, gap="small", border=True, width="stretch")
 
     with col1:
@@ -79,7 +37,7 @@ def main():
         st.image("img/humidity.jpg", width=100)
         humidity = st.metric(label="Current Humidity", value=f"{weather_data["current"]["relative_humidity_2m"]} %")
         st.write("--------")
-        surface_pressure = st.metric(label="Surface Pressure", value=f"{weather_data["current"]["surface_pressure"]} hPa") 
+        suface_pressure = st.metric(label="Surface Pressure", value=f"{weather_data["current"]["surface_pressure"]} hPa") 
 
     with col3:
         st.subheader("Wind")
@@ -103,7 +61,7 @@ def main():
             st.metric(label="Wind Direction", value="W")
         elif wind_dir > 300 and wind_dir <= 361 or wind_dir > 0 and wind_dir < 25:
             st.metric(label="Wind Direction", value="N")
-
+    
     col4, col5 = st.columns(2, gap="small", border=True, width="stretch")
 
     with col4:
@@ -122,7 +80,7 @@ def main():
         fig = px.line(filt_data, x="Date/Time", y="Temperature")
 
         # --- DISPLAY THE TEMPERATURE CHART --- #
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col5:
             # --- DISPLAY UV INDEX FOR THE WEEK --- #
@@ -133,13 +91,52 @@ def main():
         fig = px.line(df2, x="Date", y="UV Index")
 
         # --- DISPLAY THE UV CHART --- #
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
-    # --- DISPLAY 7-DAY FORECAST --- #
+def get_latlon(location):
+    if not location:
+        location = "Brisbane"
+    else:
+        location = location
 
-    # --- DISPLAY CHANCE OF RAIN AND RAIN SINCE 9AM --- #
+    loc_url = f"http://api.openweathermap.org/geo/1.0/direct?q={location}&limit=1&appid={config.api_key}"
 
-    # --- DISPLAY DESCRIPTION OF CONDITIONS --- #
+    response = requests.get(loc_url)
+    loc_data = response.json()
 
-if __name__ == '__main__':
+    lat = float(loc_data[0]["lat"])
+    lon = float(loc_data[0]["lon"])
+    return lat, lon
+
+# --- GET THE LOCAL TIME AND RETURN --- #
+def get_time(lat, lon):
+    # --- PRINT LOCATION AND LOCAL TIME --- #
+    obj = TimezoneFinder()
+    time_zone = obj.timezone_at(lng = lon, lat = lat)
+
+    local_tz = pytz.timezone(time_zone)
+    time_now = datetime.now(local_tz)
+    format_string = "%B %d, %H:%M"
+    format_time = time_now.strftime(format_string)
+
+    return format_time
+
+def get_weather(lat, lon):
+    # --- GET WEATHER DATA --- #
+    weather_url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": ["uv_index_max", "rain_sum"],
+        "hourly": "temperature_2m",
+        "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "is_day", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "rain", "cloud_cover", "surface_pressure"], "timezone": "Australia/Brisbane",
+    }
+    headers = {
+        "User-Agent": "WeatherApp"
+    }
+    response = requests.get(weather_url, params=params, headers=headers)
+    weather_data = response.json()
+    return weather_data
+
+if __name__ == "__main__":
     main()
