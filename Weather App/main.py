@@ -1,6 +1,10 @@
 import streamlit as st
 import requests
-import json
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+from timezonefinder import TimezoneFinder
+import pytz
 
 # --- CONFIG AND TITLES --- #
 st.set_page_config(page_title='Weather App', page_icon=":cloud:", layout='wide')
@@ -12,8 +16,6 @@ def main():
     loc_name = st.sidebar.text_input("Choose your location", placeholder="Enter a location").title()
     if not loc_name:
         loc_name = "Brisbane"
-    elif IndexError:
-        st.subheader("Please enter a valid location")
     else:
         loc_name = loc_name
 
@@ -34,8 +36,9 @@ def main():
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m","current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "pressure_msl", "wind_direction_10m", "wind_speed_10m", "wind_gusts_10m", "rain", "is_day"],
-        "timezone": "Australia/Brisbane"
+        "daily": ["uv_index_max", "rain_sum"],
+        "hourly": "temperature_2m",
+        "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "is_day", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "rain", "cloud_cover", "surface_pressure"], "timezone": "Australia/Brisbane",
     }
     headers = {
         "User-Agent": "MyWeatherApp/1.0 (example.com)"
@@ -49,16 +52,19 @@ def main():
     weather_data = get_weather()
 
     # --- DISPLAY WEATHER DATA --- #
-    st.header(loc_name)
+    # --- DISPLAY LOCATION AND LOCAL TIME --- #
+    obj = TimezoneFinder()
+    time_zone = obj.timezone_at(lng = lon, lat = lat)
 
-    # --- Get timezone data and make work --- #
-    #if data["current"]["is_day"] == 1:
-    #    st.subheader(":sunny:") 
-    #else:
-    #    st.subheader(":waxing_crescent_moon:")
+    local_tz = pytz.timezone(time_zone)
+    time_now = datetime.now(local_tz)
 
-    #st.write(timeframe)
+    format_string = "%B %d, %H:%M"
 
+    st.metric(label="Location", value=loc_name, label_visibility="hidden")
+    st.write(f"{time_now.strftime(format_string)}")
+
+    # --- CREATE COLUMNS FOR DATA --- #
     col1, col2, col3 = st.columns(3, gap="small", border=True, width="stretch")
 
     with col1:
@@ -73,7 +79,7 @@ def main():
         st.image("img/humidity.jpg", width=100)
         humidity = st.metric(label="Current Humidity", value=f"{weather_data["current"]["relative_humidity_2m"]} %")
         st.write("--------")
-        mslp = st.metric(label="MSLP", value=f"{weather_data["current"]["pressure_msl"]} hPa") 
+        surface_pressure = st.metric(label="Surface Pressure", value=f"{weather_data["current"]["surface_pressure"]} hPa") 
 
     with col3:
         st.subheader("Wind")
@@ -98,9 +104,38 @@ def main():
         elif wind_dir > 300 and wind_dir <= 361 or wind_dir > 0 and wind_dir < 25:
             st.metric(label="Wind Direction", value="N")
 
-    # --- DISPLAY 7-DAY FORECAST --- #
+    col4, col5 = st.columns(2, gap="small", border=True, width="stretch")
 
-    # --- DISPLAY TEMPERATURE GRAPH FOR THE DAY --- #
+    with col4:
+        # --- DISPLAY TEMPERATURE GRAPH FOR THE DAY --- #
+        st.subheader("Temperature History")
+        # --- CREATE TIME/TEMPERATURE DATAFRAME --- #
+        df = pd.DataFrame({"Date/Time": weather_data["hourly"]["time"],"Temperature": weather_data["hourly"]["temperature_2m"],})
+
+        # --- SELECT DATA BY DATE RANGE --- #
+        start_date, end_date = st.select_slider("Use the date slider to select the data timeframe", options=df['Date/Time'], value=(df['Date/Time'][0], df['Date/Time'][18]), label_visibility='hidden')
+
+        # --- CREATE DATA FRAME FOR DATE SELECTION --- #
+        filt_data = df[(df['Date/Time'] >= start_date) & (df['Date/Time'] <= end_date)]
+
+        # --- CREATE TEMPERATURE CHART --- #
+        fig = px.line(filt_data, x="Date/Time", y="Temperature")
+
+        # --- DISPLAY THE TEMPERATURE CHART --- #
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col5:
+            # --- DISPLAY UV INDEX FOR THE WEEK --- #
+        st.subheader("UV Index")
+        df2 = pd.DataFrame({"Date": weather_data["daily"]["time"],"UV Index": weather_data["daily"]["uv_index_max"],})
+    
+        # --- CREATE UV CHART --- #
+        fig = px.line(df2, x="Date", y="UV Index")
+
+        # --- DISPLAY THE UV CHART --- #
+        st.plotly_chart(fig, use_container_width=True)
+
+    # --- DISPLAY 7-DAY FORECAST --- #
 
     # --- DISPLAY CHANCE OF RAIN AND RAIN SINCE 9AM --- #
 
