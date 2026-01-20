@@ -20,7 +20,7 @@ def main():
         loc_name = loc_name
 
     # --- GET LOCATION AND SEND LAT LON TO GET DATA -- #
-    loc_url = f"http://api.openweathermap.org/geo/1.0/direct?q={loc_name}&limit=1&appid=e41a2936f2cd9b3434a1b70001092821"
+    loc_url = f"http://api.openweathermap.org/geo/1.0/direct?q={loc_name}&limit=1&appid=???"
 
     def get_latlon(loc_url):
         response = requests.get(loc_url)
